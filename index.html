@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                font-family: Arial, sans-serif;
+            }
+
+            #game-container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
+
+            #game-status {
+                font-size: 24px;
+                font-weight: bold;
+                color: #333;
+                padding: 10px 20px;
+                border-radius: 8px;
+                background-color: #f8f8f8;
+                border: 2px solid #ddd;
+                min-height: 30px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .victory {
+                background-color: #d4edda;
+                border-color: #c3e6cb;
+                color: #155724;
+            }
+
+            .defeat {
+                background-color: #f8d7da;
+                border-color: #f5c6cb;
+                color: #721c24;
+            }
+
+            #chessboard {
+                display: grid;
+                grid-template-columns: repeat(8, 80px);
+                grid-template-rows: repeat(8, 80px);
+                border: 4px solid #8b4513;
+                border-radius: 8px;
+            }
+
+            .square {
+                width: 80px;
+                height: 80px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-size: 32px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+
+            .white {
+                background-color: #f0d9b5;
+            }
+            .white_highlight {
+                background-color: #ffeb3b;
+                box-shadow:
+                    inset 0 0 0 4px #ff9800,
+                    0 0 12px rgba(255, 152, 0, 0.6);
+                transform: scale(1.05);
+                border-radius: 4px;
+            }
+
+            .white_capture {
+                background-color: #f44336;
+                box-shadow:
+                    inset 0 0 0 4px #d32f2f,
+                    0 0 12px rgba(244, 67, 54, 0.8);
+                transform: scale(1.05);
+                border-radius: 4px;
+            }
+
+            .black {
+                background-color: #476641;
+            }
+            .black_highlight {
+                background-color: #ffeb3b;
+                box-shadow:
+                    inset 0 0 0 4px #ff9800,
+                    0 0 12px rgba(255, 152, 0, 0.6);
+                transform: scale(1.05);
+                border-radius: 4px;
+            }
+
+            .black_capture {
+                background-color: #f44336;
+                box-shadow:
+                    inset 0 0 0 4px #d32f2f,
+                    0 0 12px rgba(244, 67, 54, 0.8);
+                transform: scale(1.05);
+                border-radius: 4px;
+            }
+        </style>
+        <title>Interactive Chess Board</title>
+    </head>
+    <body>
+        <div id="game-container">
+            <div id="game-status"></div>
+            <div id="chessboard"></div>
+        </div>
+        <script type="text/javascript" src="chessrules.js"></script>
+        <script type="text/javascript" src="main.js"></script>
+    </body>
+</html>
