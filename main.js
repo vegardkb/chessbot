@@ -239,6 +239,16 @@ function makeMove(move) {
   // Apply the move to game state
   gameState = apply_move(gameState, move);
 
+  // Check for immediate draws after move
+  const gameResult = get_game_result(gameState);
+  if (gameResult === "threefold_repetition") {
+    updateGameStatus("Draw - Threefold repetition!");
+    gameStatus.className = "";
+    gameOver = true;
+    updateHTMLBoard();
+    return;
+  }
+
   // Update last move for highlighting
   lastMove = {
     from: { row: move.from.row, col: move.from.col },
@@ -292,7 +302,7 @@ async function makeAIMove(color) {
   if (gameOver || isPaused || isViewingHistory) return;
 
   try {
-    const move = await engineRegistry.getMove(gameState, color, 2000);
+    const move = await engineRegistry.getMove(gameState, color, 5000);
 
     if (move && !gameOver && !isPaused && !isViewingHistory) {
       // Update last move for highlighting
@@ -303,6 +313,16 @@ async function makeAIMove(color) {
 
       // Apply the move
       gameState = apply_move(gameState, move);
+
+      // Check for immediate draws after AI move
+      const gameResult = get_game_result(gameState);
+      if (gameResult === "threefold_repetition") {
+        updateGameStatus("Draw - Threefold repetition!");
+        gameStatus.className = "";
+        gameOver = true;
+        updateHTMLBoard();
+        return;
+      }
 
       // Add to history for UI
       const historyMove = {
@@ -366,17 +386,17 @@ function checkGameEnd() {
     gameOver = true;
     return true;
   } else if (result === "stalemate") {
-    updateGameStatus("Stalemate!");
+    updateGameStatus("Draw - Stalemate!");
     gameStatus.className = "";
     gameOver = true;
     return true;
   } else if (result === "fifty_move_rule") {
-    updateGameStatus("Draw by 50-move rule!");
+    updateGameStatus("Draw - 50 move rule!");
     gameStatus.className = "";
     gameOver = true;
     return true;
   } else if (result === "threefold_repetition") {
-    updateGameStatus("Draw by threefold repetition!");
+    updateGameStatus("Draw - Threefold repetition!");
     gameStatus.className = "";
     gameOver = true;
     return true;

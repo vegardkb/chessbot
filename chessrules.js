@@ -581,58 +581,14 @@ function generate_king_moves(gameState, row, col, isWhite) {
   }
 
   // Castling
-  const color = isWhite ? "white" : "black";
-  if (!is_in_check(gameState, color)) {
-    // Kingside castling
-    if (
-      (isWhite && gameState.castlingRights.whiteKingSide) ||
-      (!isWhite && gameState.castlingRights.blackKingSide)
-    ) {
-      if (
-        is_empty(board, row, col + 1) &&
-        is_empty(board, row, col + 2) &&
-        !is_square_attacked(
-          gameState,
-          row,
-          col + 1,
-          isWhite ? "black" : "white",
-        ) &&
-        !is_square_attacked(
-          gameState,
-          row,
-          col + 2,
-          isWhite ? "black" : "white",
-        )
-      ) {
-        moves.push(new ChessMove(row, col, row, col + 2, piece, "castle"));
-      }
-    }
+  // Kingside castling
+  if (is_valid_castle(gameState, row, col, true, isWhite)) {
+    moves.push(new ChessMove(row, col, row, col + 2, piece, "castle"));
+  }
 
-    // Queenside castling
-    if (
-      (isWhite && gameState.castlingRights.whiteQueenSide) ||
-      (!isWhite && gameState.castlingRights.blackQueenSide)
-    ) {
-      if (
-        is_empty(board, row, col - 1) &&
-        is_empty(board, row, col - 2) &&
-        is_empty(board, row, col - 3) &&
-        !is_square_attacked(
-          gameState,
-          row,
-          col - 1,
-          isWhite ? "black" : "white",
-        ) &&
-        !is_square_attacked(
-          gameState,
-          row,
-          col - 2,
-          isWhite ? "black" : "white",
-        )
-      ) {
-        moves.push(new ChessMove(row, col, row, col - 2, piece, "castle"));
-      }
-    }
+  // Queenside castling
+  if (is_valid_castle(gameState, row, col, false, isWhite)) {
+    moves.push(new ChessMove(row, col, row, col - 2, piece, "castle"));
   }
 
   return moves;
@@ -646,18 +602,36 @@ function apply_move(gameState, move) {
   // Reset en passant square
   newState.enPassantSquare = null;
 
+  // Update position history for threefold repetition before making the move
+  const posKey = gameState.getPositionKey();
+  const count = newState.positionHistory.get(posKey) || 0;
+  newState.positionHistory.set(posKey, count + 1);
+
   // Handle different move types
   if (move.moveType === "castle") {
     // Castle: move king and rook
+    const isWhite = is_white_piece(move.piece);
+    const expectedRook = isWhite
+      ? piece_unicode.WhiteRook
+      : piece_unicode.BlackRook;
+
     board[move.from.row * 8 + move.from.col] = "";
     board[move.to.row * 8 + move.to.col] = move.piece;
 
-    // Move the rook
+    // Move the rook - with validation
     if (move.to.col === 6) {
       // Kingside
       const rookCol = 7;
       const newRookCol = 5;
       const rook = board[move.from.row * 8 + rookCol];
+
+      // Validate that we're moving the correct rook
+      if (rook !== expectedRook) {
+        throw new Error(
+          `Invalid castling: expected ${expectedRook} at ${rookCol}, found ${rook}`,
+        );
+      }
+
       board[move.from.row * 8 + rookCol] = "";
       board[move.from.row * 8 + newRookCol] = rook;
     } else {
@@ -665,6 +639,14 @@ function apply_move(gameState, move) {
       const rookCol = 0;
       const newRookCol = 3;
       const rook = board[move.from.row * 8 + rookCol];
+
+      // Validate that we're moving the correct rook
+      if (rook !== expectedRook) {
+        throw new Error(
+          `Invalid castling: expected ${expectedRook} at ${rookCol}, found ${rook}`,
+        );
+      }
+
       board[move.from.row * 8 + rookCol] = "";
       board[move.from.row * 8 + newRookCol] = rook;
     }
@@ -718,6 +700,19 @@ function apply_move(gameState, move) {
       // White rooks
       if (move.from.col === 0) newState.castlingRights.whiteQueenSide = false;
       if (move.from.col === 7) newState.castlingRights.whiteKingSide = false;
+    }
+  }
+
+  // Update castling rights if rook was captured
+  if (move.capturedPiece && is_rook(move.capturedPiece)) {
+    if (move.to.row === 0) {
+      // Black rook captured
+      if (move.to.col === 0) newState.castlingRights.blackQueenSide = false;
+      if (move.to.col === 7) newState.castlingRights.blackKingSide = false;
+    } else if (move.to.row === 7) {
+      // White rook captured
+      if (move.to.col === 0) newState.castlingRights.whiteQueenSide = false;
+      if (move.to.col === 7) newState.castlingRights.whiteKingSide = false;
     }
   }
 
@@ -850,6 +845,86 @@ function is_capture_move(board, piece, row, col) {
     !is_empty(board, row, col) &&
     !is_same_color(piece.piece, board[row * 8 + col])
   );
+}
+
+// Comprehensive castling validation
+function is_valid_castle(gameState, kingRow, kingCol, isKingSide, isWhite) {
+  const board = gameState.board;
+
+  // Validate that king and rook are on correct starting positions
+  const expectedKingRow = isWhite ? 7 : 0;
+  const expectedKingCol = 4;
+  const rookCol = isKingSide ? 7 : 0;
+
+  // King must be on starting square
+  if (kingRow !== expectedKingRow || kingCol !== expectedKingCol) {
+    return false;
+  }
+
+  const expectedKing = isWhite
+    ? piece_unicode.WhiteKing
+    : piece_unicode.BlackKing;
+  const expectedRook = isWhite
+    ? piece_unicode.WhiteRook
+    : piece_unicode.BlackRook;
+
+  // Check that king is the correct piece
+  const kingPiece = board[kingRow * 8 + kingCol];
+  if (kingPiece !== expectedKing) {
+    return false;
+  }
+
+  // Check that rook is the correct piece and in correct position
+  const rookPiece = board[kingRow * 8 + rookCol];
+  if (rookPiece !== expectedRook) {
+    return false;
+  }
+
+  // Additional validation: ensure the piece is the same color as expected
+  if (is_white_piece(rookPiece) !== isWhite) {
+    return false;
+  }
+
+  // Check castling rights
+  if (isWhite) {
+    if (isKingSide && !gameState.castlingRights.whiteKingSide) return false;
+    if (!isKingSide && !gameState.castlingRights.whiteQueenSide) return false;
+  } else {
+    if (isKingSide && !gameState.castlingRights.blackKingSide) return false;
+    if (!isKingSide && !gameState.castlingRights.blackQueenSide) return false;
+  }
+
+  // Check that king is not in check
+  const color = isWhite ? "white" : "black";
+  if (is_in_check(gameState, color)) {
+    return false;
+  }
+
+  // Check that squares between king and rook are empty
+  const direction = isKingSide ? 1 : -1;
+  const endCol = isKingSide ? rookCol - 1 : rookCol + 1;
+
+  for (
+    let col = kingCol + direction;
+    col !== endCol + direction;
+    col += direction
+  ) {
+    if (!is_empty(board, kingRow, col)) {
+      return false;
+    }
+  }
+
+  // Check that king doesn't pass through or land on attacked squares
+  const opponentColor = isWhite ? "black" : "white";
+  const kingDestCol = kingCol + (isKingSide ? 2 : -2);
+
+  for (let col = kingCol; col !== kingDestCol + direction; col += direction) {
+    if (is_square_attacked(gameState, kingRow, col, opponentColor)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // Checkmate detection

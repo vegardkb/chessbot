@@ -12,10 +12,16 @@ A fully-featured web-based chess game with advanced AI engines, special moves su
 ### 🤖 AI Engines
 - **Random Engine**: Makes completely random legal moves
 - **Aggressive Engine**: Prefers captures and checks
-- **Minimax Engine**: Strategic play with configurable depth (2-3 levels)
+- **Minimax Engine**: Strategic play with configurable depth (2-4 levels)
   - Uses alpha-beta pruning for optimization
   - Evaluates material, position, and mobility
   - Displays search statistics
+- **Iterative Deepening Engine**: Advanced search with time management (4-8 levels)
+  - Searches progressively deeper until time limit
+  - Uses transposition table for position caching
+  - Principal variation and killer move heuristics
+  - Superior move ordering for better pruning
+  - Shows principal variation and search depth achieved
 
 ### ♟️ Complete Chess Rules
 - **All Standard Moves**: Full piece movement rules
@@ -122,10 +128,12 @@ class ChessMove {
 ```
 
 ### Performance Optimizations
-- Alpha-beta pruning in minimax search
-- Efficient board representation
-- Lazy move generation
-- Time-limited AI thinking
+- **Alpha-beta pruning**: Cuts search tree dramatically
+- **Iterative deepening**: Progressive depth increase with time management
+- **Transposition tables**: Cache position evaluations
+- **Move ordering**: Captures, killer moves, principal variation first
+- **Time-limited search**: Graceful handling of time constraints
+- **Efficient board representation**: Fast move generation and validation
 
 ## Browser Compatibility
 
@@ -140,6 +148,9 @@ class ChessMove {
   - Opening book support
   - Endgame tablebase integration
   - Neural network evaluation
+  - Quiescence search for tactical positions
+  - Null move pruning for deeper search
+  - Late move reductions
 - **Game Features**:
   - PGN import/export
   - Position setup (FEN)
@@ -155,10 +166,17 @@ class ChessMove {
 
 ### Engine Development
 The modular engine architecture makes it easy to add sophisticated chess engines:
-- Implement evaluation functions
-- Add opening books
-- Create specialized endgame engines
-- Experiment with machine learning approaches
+- **Basic Engines**: Random, aggressive patterns
+- **Search Engines**: Minimax with alpha-beta pruning
+- **Advanced Engines**: Iterative deepening with transposition tables
+- **Future Possibilities**: Opening books, endgame tablebases, neural networks
+
+#### Iterative Deepening Benefits
+- **Time Management**: Guarantees a move within time limit
+- **Better Move Ordering**: Uses results from shallow searches
+- **Transposition Tables**: Avoids re-evaluating identical positions
+- **Principal Variation**: Shows the best line of play found
+- **Killer Move Heuristic**: Prioritizes moves that caused cutoffs
 
 ## Contributing
 
