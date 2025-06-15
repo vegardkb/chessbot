@@ -20,6 +20,52 @@
                 gap: 20px;
             }
 
+            #controls {
+                display: flex;
+                gap: 20px;
+                align-items: center;
+                background-color: #f0f0f0;
+                padding: 15px;
+                border-radius: 8px;
+                border: 2px solid #ddd;
+            }
+
+            .control-group {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 5px;
+            }
+
+            .control-group label {
+                font-weight: bold;
+                font-size: 14px;
+                color: #333;
+            }
+
+            .control-group select {
+                padding: 5px 10px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background-color: white;
+                font-size: 14px;
+            }
+
+            #new-game-btn {
+                padding: 10px 20px;
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: bold;
+            }
+
+            #new-game-btn:hover {
+                background-color: #45a049;
+            }
+
             #game-status {
                 font-size: 24px;
                 font-weight: bold;
@@ -111,6 +157,23 @@
     </head>
     <body>
         <div id="game-container">
+            <div id="controls">
+                <div class="control-group">
+                    <label for="white-player">White Player:</label>
+                    <select id="white-player">
+                        <option value="user">User</option>
+                        <option value="random">Random AI</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="black-player">Black Player:</label>
+                    <select id="black-player">
+                        <option value="random">Random AI</option>
+                        <option value="user">User</option>
+                    </select>
+                </div>
+                <button id="new-game-btn">New Game</button>
+            </div>
             <div id="game-status"></div>
             <div id="chessboard"></div>
         </div>
