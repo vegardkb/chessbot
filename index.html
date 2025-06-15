@@ -282,6 +282,64 @@
                     0 0 8px rgba(76, 175, 80, 0.5);
                 border-radius: 4px;
             }
+
+            /* Pawn Promotion Dialog */
+            #promotion-dialog {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                border: 3px solid #333;
+                border-radius: 8px;
+                padding: 20px;
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+                z-index: 1000;
+                display: none;
+            }
+
+            #promotion-dialog h3 {
+                margin: 0 0 15px 0;
+                text-align: center;
+                color: #333;
+            }
+
+            #promotion-pieces {
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+            }
+
+            .promotion-piece {
+                width: 60px;
+                height: 60px;
+                border: 2px solid #ccc;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 40px;
+                cursor: pointer;
+                background: #f8f8f8;
+                transition: all 0.2s ease;
+            }
+
+            .promotion-piece:hover {
+                border-color: #4caf50;
+                background: #e8f5e8;
+                transform: scale(1.1);
+            }
+
+            #promotion-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999;
+                display: none;
+            }
         </style>
         <title>Interactive Chess Board</title>
     </head>
@@ -294,12 +352,18 @@
                         <select id="white-player">
                             <option value="user">User</option>
                             <option value="random">Random AI</option>
+                            <option value="aggressive">Aggressive AI</option>
+                            <option value="minimax-2">Minimax (Depth 2)</option>
+                            <option value="minimax-3">Minimax (Depth 3)</option>
                         </select>
                     </div>
                     <div class="control-group">
                         <label for="black-player">Black Player:</label>
                         <select id="black-player">
                             <option value="random">Random AI</option>
+                            <option value="aggressive">Aggressive AI</option>
+                            <option value="minimax-2">Minimax (Depth 2)</option>
+                            <option value="minimax-3">Minimax (Depth 3)</option>
                             <option value="user">User</option>
                         </select>
                     </div>
@@ -320,7 +384,16 @@
                 </div>
             </div>
         </div>
+
+        <!-- Pawn Promotion Dialog -->
+        <div id="promotion-overlay"></div>
+        <div id="promotion-dialog">
+            <h3>Choose Promotion Piece</h3>
+            <div id="promotion-pieces"></div>
+        </div>
+
         <script type="text/javascript" src="chessrules.js"></script>
+        <script type="text/javascript" src="engines.js"></script>
         <script type="text/javascript" src="main.js"></script>
     </body>
 </html>

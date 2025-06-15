@@ -1,5 +1,7 @@
-//import { initialize_board, is_valid_move } from './chessrules.js';
+//import { initialize_game, get_valid_moves, is_valid_move } from './chessrules.js';
+//import { engineRegistry } from './engines.js';
 
+// DOM elements
 const chessboard = document.getElementById("chessboard");
 const gameStatus = document.getElementById("game-status");
 const whitePlayerSelect = document.getElementById("white-player");
@@ -11,42 +13,60 @@ const firstBtn = document.getElementById("first-btn");
 const prevBtn = document.getElementById("prev-btn");
 const nextBtn = document.getElementById("next-btn");
 const lastBtn = document.getElementById("last-btn");
+const promotionDialog = document.getElementById("promotion-dialog");
+const promotionOverlay = document.getElementById("promotion-overlay");
+const promotionPieces = document.getElementById("promotion-pieces");
 
-var board = initialize_board();
+// Game state variables
+var gameState = initialize_game();
 var gameOver = false;
-var isWhiteTurn = true;
-var whitePlayerType = "user";
-var blackPlayerType = "random";
 var isPaused = false;
 var isViewingHistory = false;
 
+// Move history for UI display
 var moveHistory = [];
-var boardHistory = [board.slice()];
+var boardHistory = [gameState.board.slice()];
 var currentHistoryIndex = 0;
 
+// Last move tracking for highlighting
 var lastMove = null;
 
+// Current selection
 var selected_piece = {
   piece: "",
   row: 0,
   col: 0,
 };
 
+// Promotion handling
+var pendingPromotion = null;
+
+// Initialize the game
 function initializeGame() {
-  board = initialize_board();
+  gameState = initialize_game();
   gameOver = false;
-  isWhiteTurn = true;
   isPaused = false;
   isViewingHistory = false;
   currentHistoryIndex = 0;
   selected_piece = { piece: "", row: 0, col: 0 };
-  whitePlayerType = whitePlayerSelect.value;
-  blackPlayerType = blackPlayerSelect.value;
   lastMove = null;
+  pendingPromotion = null;
 
+  // Clear history
   moveHistory = [];
-  boardHistory = [board.slice()];
+  boardHistory = [gameState.board.slice()];
   updateMoveHistoryDisplay();
+
+  // Set engines
+  const whiteEngine = whitePlayerSelect.value;
+  const blackEngine = blackPlayerSelect.value;
+
+  if (whiteEngine !== "user") {
+    engineRegistry.setActiveEngine("white", whiteEngine);
+  }
+  if (blackEngine !== "user") {
+    engineRegistry.setActiveEngine("black", blackEngine);
+  }
 
   updateGameStatus("White to move");
   updateHTMLBoard();
@@ -56,7 +76,8 @@ function initializeGame() {
   pauseBtn.textContent = "Pause";
   pauseBtn.classList.remove("paused");
 
-  if (whitePlayerType === "random" && !isPaused) {
+  // If white is AI, make the first move
+  if (whiteEngine !== "user" && !isPaused) {
     setTimeout(() => makeAIMove("white"), 500);
   }
 }
@@ -83,9 +104,11 @@ function togglePause() {
     pauseBtn.classList.remove("paused");
 
     // Resume AI play if it's an AI's turn
-    const currentPlayerType = isWhiteTurn ? whitePlayerType : blackPlayerType;
-    if (currentPlayerType === "random" && !gameOver && !isViewingHistory) {
-      const currentColor = isWhiteTurn ? "white" : "black";
+    const currentColor = gameState.isWhiteTurn ? "white" : "black";
+    const currentPlayerType = gameState.isWhiteTurn
+      ? whitePlayerSelect.value
+      : blackPlayerSelect.value;
+    if (currentPlayerType !== "user" && !gameOver && !isViewingHistory) {
       setTimeout(() => makeAIMove(currentColor), 500);
     }
   }
@@ -98,7 +121,7 @@ for (let row = 0; row < 8; row++) {
     square.className = (row + col) % 2 === 0 ? "square white" : "square black";
     square.dataset.row = row;
     square.dataset.col = col;
-    square.textContent = getPiece(board, row, col);
+    square.textContent = getPiece(gameState.board, row, col);
     square.addEventListener("click", handleSquareClick);
     chessboard.appendChild(square);
   }
@@ -109,10 +132,12 @@ updateGameStatus("White to move");
 
 // Function to handle square clicks
 function handleSquareClick(event) {
-  if (gameOver || isViewingHistory) return;
+  if (gameOver || isViewingHistory || pendingPromotion) return;
 
-  const currentPlayerType = isWhiteTurn ? whitePlayerType : blackPlayerType;
-  if (currentPlayerType === "random") return; // Don't allow clicks when AI is playing
+  const currentPlayerType = gameState.isWhiteTurn
+    ? whitePlayerSelect.value
+    : blackPlayerSelect.value;
+  if (currentPlayerType !== "user") return; // Don't allow clicks when AI is playing
 
   const clickedSquare = event.target;
   const row = parseInt(clickedSquare.dataset.row, 10);
@@ -120,21 +145,40 @@ function handleSquareClick(event) {
 
   if (selected_piece.piece === "") {
     // Select a piece
-    selected_piece = selectPiece(board, row, col);
+    selected_piece = selectPiece(gameState.board, row, col);
     if (selected_piece.piece !== "") {
-      const pieceColor = isWhitePiece(selected_piece.piece) ? "white" : "black";
-      const currentColor = isWhiteTurn ? "white" : "black";
+      const pieceColor = is_white_piece(selected_piece.piece)
+        ? "white"
+        : "black";
+      const currentColor = gameState.isWhiteTurn ? "white" : "black";
 
       if (pieceColor === currentColor) {
-        highlightPieceAndMoves(selected_piece, board, chessboard);
+        highlightPieceAndMoves(selected_piece, gameState, chessboard);
       } else {
         selected_piece.piece = "";
       }
     }
   } else {
     // Try to make a move
-    if (isValidMove(board, selected_piece, row, col)) {
-      makeMove(selected_piece, row, col);
+    const validMoves = generate_piece_moves(
+      gameState,
+      selected_piece.row,
+      selected_piece.col,
+    );
+    const selectedMove = validMoves.find(
+      (move) =>
+        move.to.row === row &&
+        move.to.col === col &&
+        is_legal_move(gameState, move),
+    );
+
+    if (selectedMove) {
+      if (selectedMove.moveType === "promotion") {
+        // Handle pawn promotion
+        showPromotionDialog(selectedMove);
+      } else {
+        makeMove(selectedMove);
+      }
     }
     unhighlightAll();
     selected_piece.piece = "";
@@ -149,31 +193,72 @@ function selectPiece(board, r, c) {
   };
 }
 
-function makeMove(piece, row, col) {
-  const capturedPiece = getPiece(board, row, col);
+function showPromotionDialog(move) {
+  pendingPromotion = move;
+  const isWhite = is_white_piece(move.piece);
 
-  // Record the move
-  const move = {
-    piece: piece.piece,
-    from: { row: piece.row, col: piece.col },
-    to: { row: row, col: col },
-    captured: capturedPiece,
-    moveNumber: Math.floor(moveHistory.length / 2) + 1,
-    isWhite: isWhiteTurn,
-  };
+  promotionPieces.innerHTML = "";
 
-  // Make the move
-  board = performMove(board, piece, row, col);
+  const pieces = isWhite
+    ? [
+        piece_unicode.WhiteQueen,
+        piece_unicode.WhiteRook,
+        piece_unicode.WhiteBishop,
+        piece_unicode.WhiteKnight,
+      ]
+    : [
+        piece_unicode.BlackQueen,
+        piece_unicode.BlackRook,
+        piece_unicode.BlackBishop,
+        piece_unicode.BlackKnight,
+      ];
+
+  pieces.forEach((piece) => {
+    const pieceDiv = document.createElement("div");
+    pieceDiv.className = "promotion-piece";
+    pieceDiv.textContent = piece;
+    pieceDiv.addEventListener("click", () => {
+      move.promotionPiece = piece;
+      hidePromotionDialog();
+      makeMove(move);
+    });
+    promotionPieces.appendChild(pieceDiv);
+  });
+
+  promotionOverlay.style.display = "block";
+  promotionDialog.style.display = "block";
+}
+
+function hidePromotionDialog() {
+  promotionOverlay.style.display = "none";
+  promotionDialog.style.display = "none";
+  pendingPromotion = null;
+}
+
+function makeMove(move) {
+  // Apply the move to game state
+  gameState = apply_move(gameState, move);
 
   // Update last move for highlighting
   lastMove = {
-    from: { row: piece.row, col: piece.col },
-    to: { row: row, col: col },
+    from: { row: move.from.row, col: move.from.col },
+    to: { row: move.to.row, col: move.to.col },
   };
 
-  // Add to history
-  moveHistory.push(move);
-  boardHistory.push(board.slice());
+  // Add to history for UI
+  const historyMove = {
+    piece: move.piece,
+    from: { row: move.from.row, col: move.from.col },
+    to: { row: move.to.row, col: move.to.col },
+    captured: move.capturedPiece,
+    moveNumber: Math.floor(moveHistory.length / 2) + 1,
+    isWhite: !gameState.isWhiteTurn, // Flipped because we already applied the move
+    moveType: move.moveType,
+    promotionPiece: move.promotionPiece,
+  };
+
+  moveHistory.push(historyMove);
+  boardHistory.push(gameState.board.slice());
   currentHistoryIndex = moveHistory.length;
 
   updateHTMLBoard();
@@ -185,115 +270,114 @@ function makeMove(piece, row, col) {
     return;
   }
 
-  // Switch turns
-  isWhiteTurn = !isWhiteTurn;
-
   // Update status and potentially make AI move
-  const nextPlayerType = isWhiteTurn ? whitePlayerType : blackPlayerType;
-  const nextColor = isWhiteTurn ? "white" : "black";
+  const nextColor = gameState.isWhiteTurn ? "white" : "black";
   const nextColorCap = nextColor.charAt(0).toUpperCase() + nextColor.slice(1);
+  const nextPlayerType = gameState.isWhiteTurn
+    ? whitePlayerSelect.value
+    : blackPlayerSelect.value;
 
-  if (isInCheck(board, nextColor)) {
+  if (is_in_check(gameState, nextColor)) {
     updateGameStatus(`${nextColorCap} is in check`);
   } else {
     updateGameStatus(`${nextColorCap} to move`);
   }
 
-  if (nextPlayerType === "random" && !isPaused) {
+  if (nextPlayerType !== "user" && !isPaused) {
     setTimeout(() => makeAIMove(nextColor), 500);
   }
 }
 
-function makeAIMove(color) {
+async function makeAIMove(color) {
   if (gameOver || isPaused || isViewingHistory) return;
 
-  const moves = getValidMoves(board, color);
-  if (moves.length === 0) {
-    checkGameEnd();
-    return;
+  try {
+    const move = await engineRegistry.getMove(gameState, color, 2000);
+
+    if (move && !gameOver && !isPaused && !isViewingHistory) {
+      // Update last move for highlighting
+      lastMove = {
+        from: { row: move.from.row, col: move.from.col },
+        to: { row: move.to.row, col: move.to.col },
+      };
+
+      // Apply the move
+      gameState = apply_move(gameState, move);
+
+      // Add to history for UI
+      const historyMove = {
+        piece: move.piece,
+        from: { row: move.from.row, col: move.from.col },
+        to: { row: move.to.row, col: move.to.col },
+        captured: move.capturedPiece,
+        moveNumber: Math.floor(moveHistory.length / 2) + 1,
+        isWhite: !gameState.isWhiteTurn, // Flipped because we already applied the move
+        moveType: move.moveType,
+        promotionPiece: move.promotionPiece,
+      };
+
+      moveHistory.push(historyMove);
+      boardHistory.push(gameState.board.slice());
+      currentHistoryIndex = moveHistory.length;
+
+      updateHTMLBoard();
+      updateMoveHistoryDisplay();
+      highlightLastMove();
+      updateHistoryButtons();
+
+      if (checkGameEnd()) {
+        return;
+      }
+
+      const nextColor = gameState.isWhiteTurn ? "white" : "black";
+      const nextColorCap =
+        nextColor.charAt(0).toUpperCase() + nextColor.slice(1);
+      const nextPlayerType = gameState.isWhiteTurn
+        ? whitePlayerSelect.value
+        : blackPlayerSelect.value;
+
+      if (is_in_check(gameState, nextColor)) {
+        updateGameStatus(`${nextColorCap} is in check`);
+      } else {
+        updateGameStatus(`${nextColorCap} to move`);
+      }
+
+      if (nextPlayerType !== "user" && !isPaused) {
+        setTimeout(() => makeAIMove(nextColor), 500);
+      }
+    }
+  } catch (error) {
+    console.error("AI move error:", error);
+    updateGameStatus("AI Error - Please restart game");
   }
-
-  const move = getRandomMove(board, color);
-  if (move) {
-    const capturedPiece = getPiece(board, move.row, move.col);
-
-    // Record the move
-    const moveRecord = {
-      piece: move.piece.piece,
-      from: { row: move.piece.row, col: move.piece.col },
-      to: { row: move.row, col: move.col },
-      captured: capturedPiece,
-      moveNumber: Math.floor(moveHistory.length / 2) + 1,
-      isWhite: isWhiteTurn,
-    };
-
-    // Make the move
-    board = performMove(board, move.piece, move.row, move.col);
-
-    // Update last move for highlighting
-    lastMove = {
-      from: { row: move.piece.row, col: move.piece.col },
-      to: { row: move.row, col: move.col },
-    };
-
-    // Add to history
-    moveHistory.push(moveRecord);
-    boardHistory.push(board.slice());
-    currentHistoryIndex = moveHistory.length;
-
-    updateHTMLBoard();
-    updateMoveHistoryDisplay();
-    highlightLastMove();
-    updateHistoryButtons();
-
-    if (checkGameEnd()) {
-      return;
-    }
-
-    isWhiteTurn = !isWhiteTurn;
-
-    const nextPlayerType = isWhiteTurn ? whitePlayerType : blackPlayerType;
-    const nextColor = isWhiteTurn ? "white" : "black";
-    const nextColorCap = nextColor.charAt(0).toUpperCase() + nextColor.slice(1);
-
-    if (isInCheck(board, nextColor)) {
-      updateGameStatus(`${nextColorCap} is in check`);
-    } else {
-      updateGameStatus(`${nextColorCap} to move`);
-    }
-
-    if (nextPlayerType === "random" && !isPaused) {
-      setTimeout(() => makeAIMove(nextColor), 500);
-    }
-  }
-}
-
-function getRandomMove(board, color) {
-  const moves = getValidMoves(board, color);
-  if (moves.length === 0) return null;
-  return moves[Math.floor(Math.random() * moves.length)];
 }
 
 function checkGameEnd() {
-  const currentColor = isWhiteTurn ? "white" : "black";
-  const currentColorCap =
-    currentColor.charAt(0).toUpperCase() + currentColor.slice(1);
-  const opponentColor = isWhiteTurn ? "black" : "white";
-  const opponentColorCap =
-    opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1);
+  const result = get_game_result(gameState);
 
-  const currentMoves = getValidMoves(board, currentColor);
-
-  if (currentMoves.length === 0) {
-    if (isInCheck(board, currentColor)) {
-      // Checkmate
-      updateGameStatus(`Checkmate! ${opponentColorCap} wins!`);
-      gameStatus.className = opponentColor === "white" ? "victory" : "defeat";
-    } else {
-      // Stalemate
-      updateGameStatus("Stalemate!");
-      gameStatus.className = "";
-    }
+  if (result === "white_wins") {
+    updateGameStatus("Checkmate! White wins!");
+    gameStatus.className = "victory";
+    gameOver = true;
+    return true;
+  } else if (result === "black_wins") {
+    updateGameStatus("Checkmate! Black wins!");
+    gameStatus.className = "defeat";
+    gameOver = true;
+    return true;
+  } else if (result === "stalemate") {
+    updateGameStatus("Stalemate!");
+    gameStatus.className = "";
+    gameOver = true;
+    return true;
+  } else if (result === "fifty_move_rule") {
+    updateGameStatus("Draw by 50-move rule!");
+    gameStatus.className = "";
+    gameOver = true;
+    return true;
+  } else if (result === "threefold_repetition") {
+    updateGameStatus("Draw by threefold repetition!");
+    gameStatus.className = "";
     gameOver = true;
     return true;
   }
@@ -308,10 +392,8 @@ function navigateToMove(index) {
   currentHistoryIndex = index;
 
   // Set board to the state at this move
-  board = boardHistory[index].slice();
-
-  // Update turn indicator based on move index
-  isWhiteTurn = index % 2 === 0;
+  gameState.board = boardHistory[index].slice();
+  gameState.isWhiteTurn = index % 2 === 0;
 
   updateHTMLBoard();
   updateMoveHistoryDisplay();
@@ -332,12 +414,12 @@ function navigateToMove(index) {
     }
   } else {
     // Back to current position
-    const nextColor = isWhiteTurn ? "white" : "black";
+    const nextColor = gameState.isWhiteTurn ? "white" : "black";
     const nextColorCap = nextColor.charAt(0).toUpperCase() + nextColor.slice(1);
 
     if (gameOver) {
       // Keep the game over status
-    } else if (isInCheck(board, nextColor)) {
+    } else if (is_in_check(gameState, nextColor)) {
       updateGameStatus(`${nextColorCap} is in check`);
       gameStatus.className = "";
     } else {
@@ -353,9 +435,11 @@ function navigateToMove(index) {
     }
 
     // Resume AI play if needed
-    const currentPlayerType = isWhiteTurn ? whitePlayerType : blackPlayerType;
-    if (currentPlayerType === "random" && !gameOver && !isPaused) {
-      const currentColor = isWhiteTurn ? "white" : "black";
+    const currentPlayerType = gameState.isWhiteTurn
+      ? whitePlayerSelect.value
+      : blackPlayerSelect.value;
+    if (currentPlayerType !== "user" && !gameOver && !isPaused) {
+      const currentColor = gameState.isWhiteTurn ? "white" : "black";
       setTimeout(() => makeAIMove(currentColor), 500);
     }
   }
@@ -373,9 +457,21 @@ function updateMoveHistoryDisplay() {
     const piece = getPieceSymbol(move.piece);
     const fromSquare = getSquareName(move.from.row, move.from.col);
     const toSquare = getSquareName(move.to.row, move.to.col);
-    const capture = move.captured ? "x" : "-";
 
-    li.textContent = `${moveNumber}${piece}${fromSquare}${capture}${toSquare}`;
+    let moveText = "";
+
+    if (move.moveType === "castle") {
+      moveText = move.to.col === 6 ? "O-O" : "O-O-O";
+    } else {
+      const capture = move.captured ? "x" : "-";
+      moveText = `${piece}${fromSquare}${capture}${toSquare}`;
+
+      if (move.moveType === "promotion") {
+        moveText += `=${getPieceSymbol(move.promotionPiece)}`;
+      }
+    }
+
+    li.textContent = `${moveNumber}${moveText}`;
 
     if (i === currentHistoryIndex - 1 && !isViewingHistory) {
       li.classList.add("current");
@@ -402,7 +498,6 @@ function updateHistoryButtons() {
 }
 
 function getPieceSymbol(piece) {
-  // Return the piece as is since we're using Unicode symbols
   return piece;
 }
 
@@ -424,7 +519,6 @@ function highlightMoveSquare(row, col) {
   const square = getHTMLSquare(chessboard, row, col);
   const baseClass = square.className.includes("white") ? "white" : "black";
 
-  // Don't overwrite selection highlights
   if (
     !square.className.includes("highlight") &&
     !square.className.includes("capture")
@@ -447,18 +541,14 @@ function unhighlightMoves() {
   }
 }
 
-function isInCheck(board, color) {
-  return color === "white" ? white_in_check(board) : black_in_check(board);
-}
-
-function highlightPieceAndMoves(piece, board, htmlBoard) {
+function highlightPieceAndMoves(piece, gameState, htmlBoard) {
   highlightSquare(piece.row, piece.col, htmlBoard, false);
-  for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 8; col++) {
-      if (isValidMove(board, piece, row, col)) {
-        const isCapture = isCaptureMove(board, piece, row, col);
-        highlightSquare(row, col, htmlBoard, isCapture);
-      }
+  const moves = generate_piece_moves(gameState, piece.row, piece.col);
+
+  for (const move of moves) {
+    if (is_legal_move(gameState, move)) {
+      const isCapture = move.capturedPiece || move.moveType === "enpassant";
+      highlightSquare(move.to.row, move.to.col, htmlBoard, isCapture);
     }
   }
 }
@@ -503,16 +593,9 @@ function unhighlightAll() {
   }
 }
 
-function performMove(board, piece, row, col) {
-  const newBoard = [...board];
-  newBoard[piece.row * 8 + piece.col] = "";
-  newBoard[row * 8 + col] = piece.piece;
-  return newBoard;
-}
-
 function updateHTMLBoard() {
   for (let square = 0; square < 64; square++) {
-    chessboard.children[square].textContent = board[square];
+    chessboard.children[square].textContent = gameState.board[square];
   }
 }
 
@@ -535,23 +618,14 @@ function updateGameStatus(message) {
   }
 }
 
-// Wrapper functions for chess rules
-function isValidMove(board, piece, row, col) {
-  return is_valid_move(board, piece, row, col);
-}
-
-function isCaptureMove(board, piece, row, col) {
-  return is_capture_move(board, piece, row, col);
-}
-
-function getValidMoves(board, color) {
-  return get_valid_moves(board, color);
-}
-
-function isWhitePiece(piece) {
-  return is_white_piece(piece);
-}
-
-function isBlackPiece(piece) {
-  return is_black_piece(piece);
-}
+// Close promotion dialog when clicking overlay
+promotionOverlay.addEventListener("click", () => {
+  if (pendingPromotion) {
+    // Default to queen if user clicks away
+    pendingPromotion.promotionPiece = is_white_piece(pendingPromotion.piece)
+      ? piece_unicode.WhiteQueen
+      : piece_unicode.BlackQueen;
+    hidePromotionDialog();
+    makeMove(pendingPromotion);
+  }
+});
